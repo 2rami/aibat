@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>🥊 AI 배틀 - 실제 터미널</title>
+    <link rel="stylesheet" href="node_modules/xterm/css/xterm.css" />
+    <style>
+        body {
+            margin: 0;
+            padding: 15px;
+            font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #1e1e1e;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 15px;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            padding: 12px;
+            border-radius: 8px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+        }
+        
+        .header p {
+            margin: 5px 0 0 0;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+        
+        .terminals {
+            display: flex;
+            flex: 1;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .terminal-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-radius: 8px;
+            overflow: hidden;
+            border: 2px solid;
+        }
+        
+        .claude-container {
+            border-color: #007ACC;
+        }
+        
+        .gemini-container {
+            border-color: #FF6B35;
+        }
+        
+        .terminal-header {
+            padding: 8px 12px;
+            font-weight: bold;
+            color: white;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .claude-header {
+            background: #007ACC;
+        }
+        
+        .gemini-header {
+            background: #FF6B35;
+        }
+        
+        .terminal {
+            flex: 1;
+            background: #1e1e1e;
+        }
+        
+        .input-section {
+            background: #252526;
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid #3e3e42;
+        }
+        
+        .input-label {
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #cccccc;
+            font-size: 14px;
+        }
+        
+        .input-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        input {
+            flex: 1;
+            padding: 8px 12px;
+            font-size: 14px;
+            background: #3c3c3c;
+            color: white;
+            border: 1px solid #5a5a5a;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+        
+        input:focus {
+            outline: none;
+            border-color: #007ACC;
+        }
+        
+        button {
+            padding: 8px 16px;
+            background: #0e639c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        button:hover {
+            background: #1177bb;
+        }
+        
+        button.secondary {
+            background: #5a5a5a;
+        }
+        
+        button.secondary:hover {
+            background: #6a6a6a;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🥊 AI 배틀 - VS Code 스타일 터미널</h1>
+        <p>실제 Claude와 Gemini 터미널이 GUI 안에서 실행됩니다</p>
+    </div>
+    
+    <div class="terminals">
+        <div class="terminal-container claude-container">
+            <div class="terminal-header claude-header">
+                <span>🤖</span>
+                <span>Claude Code Terminal</span>
+            </div>
+            <div id="claude-terminal" class="terminal"></div>
+        </div>
+        
+        <div class="terminal-container gemini-container">
+            <div class="terminal-header gemini-header">
+                <span>🚀</span>
+                <span>Gemini CLI Terminal</span>
+            </div>
+            <div id="gemini-terminal" class="terminal"></div>
+        </div>
+    </div>
+    
+    <div class="input-section">
+        <div class="input-label">💬 두 터미널에 동시 명령어 전송</div>
+        <div class="input-row">
+            <input type="text" id="commandInput" placeholder="명령어를 입력하고 Enter를 누르세요..." />
+            <button onclick="sendToBoth()">전송</button>
+            <button class="secondary" onclick="clearBoth()">지우기</button>
+        </div>
+    </div>
+
+    <script src="node_modules/xterm/lib/xterm.js"></script>
+    <script src="node_modules/xterm-addon-fit/lib/xterm-addon-fit.js"></script>
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        // VS Code와 같은 테마
+        const terminalTheme = {
+            background: '#1e1e1e',
+            foreground: '#cccccc',
+            cursor: '#ffffff',
+            selection: '#264f78',
+            black: '#000000',
+            brightBlack: '#666666',
+            red: '#cd3131',
+            brightRed: '#f14c4c',
+            green: '#0dbc79',
+            brightGreen: '#23d18b',
+            yellow: '#e5e510',
+            brightYellow: '#f5f543',
+            blue: '#2472c8',
+            brightBlue: '#3b8eea',
+            magenta: '#bc3fbc',
+            brightMagenta: '#d670d6',
+            cyan: '#11a8cd',
+            brightCyan: '#29b8db',
+            white: '#e5e5e5',
+            brightWhite: '#ffffff'
+        };
+        
+        // 터미널 생성 (VS Code 스타일)
+        const claudeTerminal = new Terminal({
+            theme: terminalTheme,
+            fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace',
+            fontSize: 13,
+            lineHeight: 1.2,
+            cursorBlink: true,
+            scrollback: 1000
+        });
+        
+        const geminiTerminal = new Terminal({
+            theme: terminalTheme,
+            fontFamily: '"Monaco", "Menlo", "Ubuntu Mono", monospace',
+            fontSize: 13,
+            lineHeight: 1.2,
+            cursorBlink: true,
+            scrollback: 1000
+        });
+        
+        // Fit addon 추가 (창 크기에 맞춤)
+        const claudeFitAddon = new FitAddon.FitAddon();
+        const geminiFitAddon = new FitAddon.FitAddon();
+        
+        claudeTerminal.loadAddon(claudeFitAddon);
+        geminiTerminal.loadAddon(geminiFitAddon);
+        
+        // 터미널을 DOM에 연결
+        claudeTerminal.open(document.getElementById('claude-terminal'));
+        geminiTerminal.open(document.getElementById('gemini-terminal'));
+        
+        // 크기 맞추기
+        setTimeout(() => {
+            claudeFitAddon.fit();
+            geminiFitAddon.fit();
+        }, 100);
+        
+        // 백엔드에서 터미널 출력 받기
+        ipcRenderer.on('claude-data', (event, data) => {
+            claudeTerminal.write(data);
+        });
+        
+        ipcRenderer.on('gemini-data', (event, data) => {
+            geminiTerminal.write(data);
+        });
+        
+        // 터미널에서 키보드 입력을 백엔드로 전송
+        claudeTerminal.onData((data) => {
+            ipcRenderer.send('claude-input', data);
+        });
+        
+        geminiTerminal.onData((data) => {
+            ipcRenderer.send('gemini-input', data);
+        });
+        
+        // 터미널 크기 변경 시 백엔드에 알림
+        claudeTerminal.onResize((size) => {
+            ipcRenderer.send('claude-resize', size);
+        });
+        
+        geminiTerminal.onResize((size) => {
+            ipcRenderer.send('gemini-resize', size);
+        });
+        
+        // 두 터미널에 동시 명령어 전송
+        function sendToBoth() {
+            const command = document.getElementById('commandInput').value.trim();
+            if (!command) return;
+            
+            ipcRenderer.send('send-to-both', command);
+            document.getElementById('commandInput').value = '';
+        }
+        
+        // 두 터미널 지우기
+        function clearBoth() {
+            claudeTerminal.clear();
+            geminiTerminal.clear();
+        }
+        
+        // Enter키로 전송
+        document.getElementById('commandInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendToBoth();
+            }
+        });
+        
+        // 창 크기 변경 시 터미널 크기 조정
+        window.addEventListener('resize', () => {
+            setTimeout(() => {
+                claudeFitAddon.fit();
+                geminiFitAddon.fit();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
