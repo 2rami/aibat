@@ -38,11 +38,68 @@
             color: #00aa00;
         }
         
-        .terminals {
+        .main-content {
             display: flex;
             flex: 1;
             gap: 4px;
             margin-bottom: 4px;
+        }
+        
+        .terminals {
+            display: flex;
+            flex: 2;
+            gap: 4px;
+            flex-direction: column;
+        }
+        
+        .terminal-row {
+            display: flex;
+            gap: 4px;
+            flex: 1;
+        }
+        
+        .stats-panel {
+            flex: 1;
+            border: 1px solid #333333;
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            max-width: 300px;
+            min-width: 250px;
+        }
+        
+        .stats-header {
+            padding: 4px 8px;
+            background: #000000;
+            border-bottom: 1px solid #333333;
+            color: #00ff00;
+            font-size: 10px;
+        }
+        
+        .stats-content {
+            flex: 1;
+            padding: 8px;
+            overflow-y: auto;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        
+        .stat-item {
+            margin-bottom: 4px;
+            color: #00aa00;
+        }
+        
+        .stat-value {
+            color: #00ff00;
+            font-weight: bold;
+        }
+        
+        .stat-error {
+            color: #ff4444;
+        }
+        
+        .stat-success {
+            color: #44ff44;
         }
         
         .terminal-container {
@@ -153,19 +210,40 @@
         <p>[CTRL+SHIFT+T] Switch Terminal | [F12] Debug Console | Working in: ~/Desktop</p>
     </div>
     
-    <div class="terminals">
-        <div class="terminal-container claude-container" id="claude-container">
-            <div class="terminal-header claude-header">
-                [CLAUDE] Terminal
+    <div class="main-content">
+        <div class="terminals">
+            <div class="terminal-row">
+                <div class="terminal-container claude-container" id="claude-container">
+                    <div class="terminal-header claude-header">
+                        [CLAUDE] Terminal
+                    </div>
+                    <div id="claude-terminal" class="terminal"></div>
+                </div>
+                
+                <div class="terminal-container gemini-container" id="gemini-container">
+                    <div class="terminal-header gemini-header">
+                        [GEMINI] Terminal
+                    </div>
+                    <div id="gemini-terminal" class="terminal"></div>
+                </div>
             </div>
-            <div id="claude-terminal" class="terminal"></div>
         </div>
         
-        <div class="terminal-container gemini-container" id="gemini-container">
-            <div class="terminal-header gemini-header">
-                [GEMINI] Terminal
+        <div class="stats-panel">
+            <div class="stats-header">
+                [STATS] Activity Monitor
             </div>
-            <div id="gemini-terminal" class="terminal"></div>
+            <div class="stats-content" id="stats-content">
+                <div class="stat-item">세션 시작: <span class="stat-value" id="session-start">--:--</span></div>
+                <div class="stat-item">총 명령어: <span class="stat-value" id="total-commands">0</span></div>
+                <div class="stat-item">Claude 응답: <span class="stat-value" id="claude-responses">0</span></div>
+                <div class="stat-item">Gemini 응답: <span class="stat-value" id="gemini-responses">0</span></div>
+                <div class="stat-item">에러 발생: <span class="stat-error" id="error-count">0</span></div>
+                <div class="stat-item">성공 완료: <span class="stat-success" id="success-count">0</span></div>
+                <hr style="border: 1px solid #333; margin: 8px 0;">
+                <div class="stat-item">최근 활동:</div>
+                <div id="recent-activity" style="max-height: 200px; overflow-y: auto; font-size: 9px;"></div>
+            </div>
         </div>
     </div>
     
@@ -285,13 +363,82 @@
             setFocus('input');
         }, 800);
         
-        // 백엔드에서 터미널 출력 받기
+        // 통계 관리 객체
+        const stats = {
+            sessionStart: new Date(),
+            totalCommands: 0,
+            claudeResponses: 0,
+            geminiResponses: 0,
+            errorCount: 0,
+            successCount: 0,
+            recentActivity: []
+        };
+        
+        // 통계 업데이트 함수
+        function updateStats() {
+            document.getElementById('session-start').textContent = 
+                stats.sessionStart.toLocaleTimeString('ko-KR', { hour12: false });
+            document.getElementById('total-commands').textContent = stats.totalCommands;
+            document.getElementById('claude-responses').textContent = stats.claudeResponses;
+            document.getElementById('gemini-responses').textContent = stats.geminiResponses;
+            document.getElementById('error-count').textContent = stats.errorCount;
+            document.getElementById('success-count').textContent = stats.successCount;
+            
+            // 최근 활동 업데이트
+            const activityHtml = stats.recentActivity.slice(-10).map(activity => 
+                `<div style="margin-bottom: 2px; color: ${activity.color};">${activity.time} ${activity.text}</div>`
+            ).join('');
+            document.getElementById('recent-activity').innerHTML = activityHtml;
+        }
+        
+        // 활동 로그 추가
+        function addActivity(text, color = '#00aa00') {
+            const time = new Date().toLocaleTimeString('ko-KR', { hour12: false });
+            stats.recentActivity.push({ time, text, color });
+            if (stats.recentActivity.length > 50) {
+                stats.recentActivity.splice(0, 10); // 오래된 로그 제거
+            }
+            updateStats();
+        }
+        
+        // 텍스트 분석 함수
+        function analyzeTerminalOutput(data, terminal) {
+            const text = data.toString().toLowerCase();
+            
+            // 에러 패턴 감지
+            if (text.includes('error') || text.includes('failed') || text.includes('exception')) {
+                stats.errorCount++;
+                addActivity(`${terminal}: 에러 감지`, '#ff4444');
+            }
+            
+            // 성공 패턴 감지
+            if (text.includes('success') || text.includes('completed') || text.includes('done')) {
+                stats.successCount++;
+                addActivity(`${terminal}: 성공 완료`, '#44ff44');
+            }
+            
+            // 파일 관련 활동
+            if (text.includes('created') || text.includes('saved')) {
+                addActivity(`${terminal}: 파일 생성/저장`, '#00ffff');
+            }
+            
+            // 명령어 완료 추적
+            if (text.includes('$') || text.includes('>')) {
+                if (terminal === 'Claude') stats.claudeResponses++;
+                else stats.geminiResponses++;
+                addActivity(`${terminal}: 명령어 완료`, '#00ff00');
+            }
+        }
+        
+        // 백엔드에서 터미널 출력 받기 (통계 수집 추가)
         ipcRenderer.on('claude-data', (event, data) => {
             claudeTerminal.write(data);
+            analyzeTerminalOutput(data, 'Claude');
         });
         
         ipcRenderer.on('gemini-data', (event, data) => {
             geminiTerminal.write(data);
+            analyzeTerminalOutput(data, 'Gemini');
         });
         
         // 포커스 상태 관리
@@ -383,6 +530,7 @@
                     ipcRenderer.send('send-enter-both');
                     waitingForEnter = false;
                     document.getElementById('commandInput').placeholder = 'Type command or message...';
+                    addActivity('엔터 실행', '#ffff00');
                     
                     // 엔터 전송 후에도 터미널 포커스 유지
                     setTimeout(() => {
@@ -402,6 +550,10 @@
             waitingForEnter = true; // 다음 엔터를 기다림
             document.getElementById('commandInput').value = '';
             document.getElementById('commandInput').placeholder = 'Press Enter again to execute...';
+            
+            // 통계 업데이트
+            stats.totalCommands++;
+            addActivity(`명령어 전송: ${command.length > 30 ? command.substring(0, 30) + '...' : command}`, '#00ffff');
             
             // 전송 후 현재 선택된 터미널에 포커스 유지
             setTimeout(() => {
@@ -493,6 +645,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             setTimeout(fitTerminals, 300);
             setTimeout(() => setFocus('input'), 500); // DOM 로드 후 입력창 포커스
+            
+            // 초기 통계 표시
+            updateStats();
+            addActivity('AI Battle Terminal 시작', '#00ff00');
         });
         
         // 터미널이 보이게 될 때마다 크기 조정
