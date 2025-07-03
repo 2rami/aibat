@@ -243,11 +243,17 @@
         // 크기 맞추기 (에러 방지)
         function fitTerminals() {
             try {
-                if (claudeFitAddon && claudeTerminal.element) {
+                // 터미널 컨테이너가 보이는지 확인
+                const claudeContainer = document.getElementById('claude-terminal');
+                const geminiContainer = document.getElementById('gemini-terminal');
+                
+                if (claudeContainer && claudeContainer.offsetWidth > 0 && claudeFitAddon && claudeTerminal.element) {
                     claudeFitAddon.fit();
+                    console.log('Claude 터미널 크기 조정됨');
                 }
-                if (geminiFitAddon && geminiTerminal.element) {
+                if (geminiContainer && geminiContainer.offsetWidth > 0 && geminiFitAddon && geminiTerminal.element) {
                     geminiFitAddon.fit();
+                    console.log('Gemini 터미널 크기 조정됨');
                 }
             } catch (error) {
                 console.log('터미널 크기 조정 오류 (무시됨):', error.message);
@@ -465,8 +471,23 @@
             resizeTimeout = setTimeout(() => {
                 console.log('창 크기 변경 감지 - 터미널 크기 조정');
                 fitTerminals();
-            }, 150);
+                // 추가로 한 번 더 (안정성)
+                setTimeout(fitTerminals, 100);
+            }, 100);
         });
+        
+        // 추가 리사이즈 이벤트들
+        window.addEventListener('load', () => {
+            setTimeout(fitTerminals, 200);
+        });
+        
+        // 터미널 컨테이너 크기 변경 감지
+        const resizeObserver = new ResizeObserver(() => {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(fitTerminals, 50);
+        });
+        
+        resizeObserver.observe(document.querySelector('.terminals'));
         
         // 추가적인 크기 조정 트리거들
         document.addEventListener('DOMContentLoaded', () => {
