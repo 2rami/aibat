@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const pty = require('node-pty');
 const path = require('path');
+const os = require('os');
 
 let mainWindow;
 let claudeTerminal;
@@ -26,22 +27,44 @@ function createWindow() {
 function createTerminals() {
   console.log('실제 터미널 생성 중...');
   
-  // Claude 터미널 생성 (VS Code처럼)
-  claudeTerminal = pty.spawn('claude', [], {
+  // 바탕화면 경로 (크로스플랫폼)
+  const desktopPath = path.join(os.homedir(), 'Desktop');
+  console.log('시작 경로:', desktopPath);
+  
+  // PATH 환경변수 확장 (배포된 앱용)
+  const expandedPath = [
+    '/usr/local/bin',
+    '/usr/bin', 
+    '/bin',
+    path.join(os.homedir(), '.npm-global', 'bin'),
+    path.join(os.homedir(), 'node_modules', '.bin'),
+    process.env.PATH || ''
+  ].join(':');
+  
+  const terminalEnv = {
+    ...process.env,
+    TERM: 'xterm-256color',
+    PATH: expandedPath
+  };
+  
+  console.log('확장된 PATH:', expandedPath);
+  
+  // Claude 터미널 생성 (쉘을 통해 실행)
+  claudeTerminal = pty.spawn('/bin/bash', ['-c', `cd "${desktopPath}" && claude`], {
     name: 'xterm-256color',
     cols: 80,
     rows: 30,
-    cwd: process.cwd(),
-    env: { ...process.env, TERM: 'xterm-256color' }
+    cwd: desktopPath,
+    env: terminalEnv
   });
 
-  // Gemini 터미널 생성 (VS Code처럼)
-  geminiTerminal = pty.spawn('gemini', [], {
+  // Gemini 터미널 생성 (쉘을 통해 실행)
+  geminiTerminal = pty.spawn('/bin/bash', ['-c', `cd "${desktopPath}" && gemini`], {
     name: 'xterm-256color',
     cols: 80,
     rows: 30,
-    cwd: process.cwd(),
-    env: { ...process.env, TERM: 'xterm-256color' }
+    cwd: desktopPath,
+    env: terminalEnv
   });
 
   // Claude 터미널 출력을 프론트엔드로 전송
@@ -58,7 +81,7 @@ function createTerminals() {
     }
   });
 
-  // 커서 깜빡임 제거 (채팅창에 나타나는 문제 해결)
+  // 초기 메시지 제거 (ANSI 이스케이프 시퀀스 문제 해결)
   
   console.log('실제 터미널 준비 완료!');
 }
@@ -76,16 +99,24 @@ ipcMain.on('gemini-input', (event, data) => {
   }
 });
 
-// 터미널 크기 조정
+// 터미널 크기 조정 (에러 방지)
 ipcMain.on('claude-resize', (event, size) => {
-  if (claudeTerminal) {
-    claudeTerminal.resize(size.cols, size.rows);
+  try {
+    if (claudeTerminal && claudeTerminal.pid) {
+      claudeTerminal.resize(size.cols, size.rows);
+    }
+  } catch (error) {
+    console.log('Claude 터미널 크기 조정 오류 (무시됨):', error.message);
   }
 });
 
 ipcMain.on('gemini-resize', (event, size) => {
-  if (geminiTerminal) {
-    geminiTerminal.resize(size.cols, size.rows);
+  try {
+    if (geminiTerminal && geminiTerminal.pid) {
+      geminiTerminal.resize(size.cols, size.rows);
+    }
+  } catch (error) {
+    console.log('Gemini 터미널 크기 조정 오류 (무시됨):', error.message);
   }
 });
 

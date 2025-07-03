@@ -1,21 +1,53 @@
 {
   "name": "ai-battle-gui",
   "version": "1.0.0",
-  "description": "AI 배틀 GUI - 진짜 터미널 표시",
+  "description": "AI Battle Terminal - Compare Claude Code vs Gemini CLI",
   "main": "real_terminal.js",
+  "author": "2rami",
+  "homepage": "https://github.com/2rami/aibat",
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --enable-logging"
+    "dev": "electron . --enable-logging",
+    "build": "electron-builder",
+    "build:mac": "electron-builder --mac",
+    "build:win": "electron-builder --win",
+    "build:linux": "electron-builder --linux",
+    "dist": "npm run build"
   },
   "dependencies": {
-    "electron": "^25.0.0",
     "node-pty": "^1.1.0-beta34",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
     "xterm": "^5.3.0",
     "xterm-addon-fit": "^0.8.0"
   },
   "devDependencies": {
+    "electron": "^25.0.0",
     "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.aibattle.terminal",
+    "productName": "AI Battle Terminal",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "real_terminal.js",
+      "real_terminal.html",
+      "package.json",
+      "node_modules/",
+      "assets/"
+    ],
+    "mac": {
+      "icon": "assets/icon.icns",
+      "category": "public.app-category.developer-tools",
+      "target": "dmg"
+    },
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": "nsis"
+    },
+    "linux": {
+      "icon": "assets/icon.png",
+      "target": "AppImage"
+    }
   }
 }
