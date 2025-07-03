@@ -49,14 +49,53 @@
             border-radius: 8px;
             overflow: hidden;
             border: 2px solid;
+            transition: all 0.2s ease;
+            position: relative;
         }
         
         .claude-container {
             border-color: #007ACC;
         }
         
+        .claude-container.focused {
+            border-color: #0099FF;
+            box-shadow: 0 0 10px rgba(0, 153, 255, 0.3);
+        }
+        
         .gemini-container {
             border-color: #FF6B35;
+        }
+        
+        .gemini-container.focused {
+            border-color: #FF8855;
+            box-shadow: 0 0 10px rgba(255, 136, 85, 0.3);
+        }
+        
+        .status-indicator {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 3px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            z-index: 10;
+        }
+        
+        .status-thinking {
+            background: #FF9800;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-ready {
+            background: #4CAF50;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
         }
         
         .terminal-header {
@@ -102,7 +141,7 @@
             align-items: center;
         }
         
-        input {
+        textarea {
             flex: 1;
             padding: 8px 12px;
             font-size: 14px;
@@ -111,11 +150,25 @@
             border: 1px solid #5a5a5a;
             border-radius: 4px;
             font-family: 'Monaco', 'Consolas', monospace;
+            resize: vertical;
+            min-height: 60px;
+            max-height: 200px;
         }
         
-        input:focus {
+        textarea:focus {
             outline: none;
             border-color: #007ACC;
+        }
+        
+        .chat-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .chat-controls button {
+            padding: 4px 8px;
+            font-size: 12px;
         }
         
         button {
@@ -149,7 +202,8 @@
     </div>
     
     <div class="terminals">
-        <div class="terminal-container claude-container">
+        <div class="terminal-container claude-container" id="claude-container">
+            <div class="status-indicator status-ready" id="claude-status">준비</div>
             <div class="terminal-header claude-header">
                 <span>🤖</span>
                 <span>Claude Code Terminal</span>
@@ -157,7 +211,8 @@
             <div id="claude-terminal" class="terminal"></div>
         </div>
         
-        <div class="terminal-container gemini-container">
+        <div class="terminal-container gemini-container" id="gemini-container">
+            <div class="status-indicator status-ready" id="gemini-status">준비</div>
             <div class="terminal-header gemini-header">
                 <span>🚀</span>
                 <span>Gemini CLI Terminal</span>
@@ -168,10 +223,14 @@
     
     <div class="input-section">
         <div class="input-label">💬 두 터미널에 동시 명령어 전송</div>
+        <div class="chat-controls">
+            <button class="secondary" onclick="pasteFromClipboard()">📋 붙여넣기</button>
+            <button class="secondary" onclick="clearInput()">🗑️ 입력 지우기</button>
+            <button class="secondary" onclick="clearBoth()">🆑 터미널 지우기</button>
+        </div>
         <div class="input-row">
-            <input type="text" id="commandInput" placeholder="명령어를 입력하고 Enter를 누르세요..." />
-            <button onclick="sendToBoth()">전송</button>
-            <button class="secondary" onclick="clearBoth()">지우기</button>
+            <textarea id="commandInput" placeholder="명령어나 메시지를 입력하세요... (Ctrl+Enter로 전송)"></textarea>
+            <button onclick="sendToBoth()">📤 전송</button>
         </div>
     </div>
 
@@ -249,13 +308,27 @@
             geminiTerminal.write(data);
         });
         
+        // 포커스 상태 관리
+        let currentFocus = null;
+        
         // 터미널에서 키보드 입력을 백엔드로 전송
         claudeTerminal.onData((data) => {
+            setStatus('claude', 'thinking', '입력 중...');
             ipcRenderer.send('claude-input', data);
         });
         
         geminiTerminal.onData((data) => {
+            setStatus('gemini', 'thinking', '입력 중...');
             ipcRenderer.send('gemini-input', data);
+        });
+        
+        // 터미널 포커스 이벤트
+        claudeTerminal.onFocus(() => {
+            setTerminalFocus('claude');
+        });
+        
+        geminiTerminal.onFocus(() => {
+            setTerminalFocus('gemini');
         });
         
         // 터미널 크기 변경 시 백엔드에 알림
@@ -267,26 +340,92 @@
             ipcRenderer.send('gemini-resize', size);
         });
         
+        // 상태 표시 함수
+        function setStatus(terminal, type, message) {
+            const statusElement = document.getElementById(`${terminal}-status`);
+            statusElement.textContent = message;
+            statusElement.className = `status-indicator status-${type}`;
+        }
+        
+        // 터미널 포커스 표시 함수
+        function setTerminalFocus(terminal) {
+            // 모든 포커스 제거
+            document.getElementById('claude-container').classList.remove('focused');
+            document.getElementById('gemini-container').classList.remove('focused');
+            
+            // 선택된 터미널에 포커스 추가
+            if (terminal) {
+                document.getElementById(`${terminal}-container`).classList.add('focused');
+                currentFocus = terminal;
+            }
+        }
+        
+        // 클립보드에서 붙여넣기
+        async function pasteFromClipboard() {
+            try {
+                const text = await navigator.clipboard.readText();
+                const textarea = document.getElementById('commandInput');
+                textarea.value += text;
+                textarea.focus();
+            } catch (err) {
+                alert('클립보드 접근 권한이 필요합니다.');
+            }
+        }
+        
+        // 입력창 지우기
+        function clearInput() {
+            document.getElementById('commandInput').value = '';
+            document.getElementById('commandInput').focus();
+        }
+        
         // 두 터미널에 동시 명령어 전송
         function sendToBoth() {
             const command = document.getElementById('commandInput').value.trim();
             if (!command) return;
             
+            // 상태를 '전송 중'으로 변경
+            setStatus('claude', 'thinking', '처리 중...');
+            setStatus('gemini', 'thinking', '처리 중...');
+            
+            // 명령어 전송
             ipcRenderer.send('send-to-both', command);
             document.getElementById('commandInput').value = '';
+            
+            // 일정 시간 후 상태를 '준비'로 변경
+            setTimeout(() => {
+                setStatus('claude', 'ready', '준비');
+                setStatus('gemini', 'ready', '준비');
+            }, 3000);
         }
         
         // 두 터미널 지우기
         function clearBoth() {
             claudeTerminal.clear();
             geminiTerminal.clear();
+            setStatus('claude', 'ready', '준비');
+            setStatus('gemini', 'ready', '준비');
         }
         
-        // Enter키로 전송
-        document.getElementById('commandInput').addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
+        // 키보드 이벤트
+        document.getElementById('commandInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendToBoth();
+            } else if (e.key === 'Enter' && e.ctrlKey) {
+                e.preventDefault();
                 sendToBoth();
             }
+        });
+        
+        // 터미널 컨테이너 클릭 시 포커스
+        document.getElementById('claude-container').addEventListener('click', () => {
+            claudeTerminal.focus();
+            setTerminalFocus('claude');
+        });
+        
+        document.getElementById('gemini-container').addEventListener('click', () => {
+            geminiTerminal.focus();
+            setTerminalFocus('gemini');
         });
         
         // 창 크기 변경 시 터미널 크기 조정

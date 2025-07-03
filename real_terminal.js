@@ -92,11 +92,15 @@ ipcMain.on('send-to-both', (event, command) => {
   console.log('두 터미널에 동시 전송:', command);
   
   if (claudeTerminal) {
-    claudeTerminal.write(command + '\n');
+    // 명령어 입력 후 자동으로 엔터
+    claudeTerminal.write(command);
+    claudeTerminal.write('\r'); // 엔터키 자동 입력
   }
   
   if (geminiTerminal) {
-    geminiTerminal.write(command + '\n');
+    // 명령어 입력 후 자동으로 엔터
+    geminiTerminal.write(command);
+    geminiTerminal.write('\r'); // 엔터키 자동 입력
   }
 });
 
