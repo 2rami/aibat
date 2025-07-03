@@ -19,7 +19,7 @@ function createWindow() {
 
   mainWindow.loadFile('real_terminal.html');
   
-  // 개발자 도구 열기 (디버깅용)
+  // 개발자 도구는 F12로만 열기 (기본적으로 닫힌 상태)
   // mainWindow.webContents.openDevTools();
 }
 
@@ -28,20 +28,20 @@ function createTerminals() {
   
   // Claude 터미널 생성 (VS Code처럼)
   claudeTerminal = pty.spawn('claude', [], {
-    name: 'xterm-color',
+    name: 'xterm-256color',
     cols: 80,
     rows: 30,
     cwd: process.cwd(),
-    env: process.env
+    env: { ...process.env, TERM: 'xterm-256color' }
   });
 
   // Gemini 터미널 생성 (VS Code처럼)
   geminiTerminal = pty.spawn('gemini', [], {
-    name: 'xterm-color',
+    name: 'xterm-256color',
     cols: 80,
     rows: 30,
     cwd: process.cwd(),
-    env: process.env
+    env: { ...process.env, TERM: 'xterm-256color' }
   });
 
   // Claude 터미널 출력을 프론트엔드로 전송
@@ -57,6 +57,8 @@ function createTerminals() {
       mainWindow.webContents.send('gemini-data', data);
     }
   });
+
+  // 커서 깜빡임 제거 (채팅창에 나타나는 문제 해결)
   
   console.log('실제 터미널 준비 완료!');
 }
@@ -92,15 +94,37 @@ ipcMain.on('send-to-both', (event, command) => {
   console.log('두 터미널에 동시 전송:', command);
   
   if (claudeTerminal) {
-    // 명령어 입력 후 자동으로 엔터
     claudeTerminal.write(command);
     claudeTerminal.write('\r'); // 엔터키 자동 입력
   }
   
   if (geminiTerminal) {
-    // 명령어 입력 후 자동으로 엔터
     geminiTerminal.write(command);
     geminiTerminal.write('\r'); // 엔터키 자동 입력
+  }
+});
+
+// 두 터미널에 엔터만 전송
+ipcMain.on('send-enter-both', (event) => {
+  console.log('두 터미널에 엔터 전송');
+  
+  if (claudeTerminal) {
+    claudeTerminal.write('\r');
+  }
+  
+  if (geminiTerminal) {
+    geminiTerminal.write('\r');
+  }
+});
+
+// 개발자 도구 토글
+ipcMain.on('toggle-devtools', (event) => {
+  if (mainWindow) {
+    if (mainWindow.webContents.isDevToolsOpened()) {
+      mainWindow.webContents.closeDevTools();
+    } else {
+      mainWindow.webContents.openDevTools();
+    }
   }
 });
 
