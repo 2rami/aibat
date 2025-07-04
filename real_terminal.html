@@ -431,7 +431,7 @@
             summaryDiv.insertBefore(loadingItem, summaryDiv.firstChild);
             
             // Ollama에게 보낼 프롬프트 구성
-            let prompt = `다음은 Claude와 Gemini AI 간의 대화입니다. 이 대화를 간결하게 요약해주세요 (한국어로, 100자 이내):\n\n`;
+            let prompt = `한국어로만 답변하세요. 다음 대화를 한 줄로 요약하세요:\n\n`;
             
             if (claudeText) {
                 prompt += `Claude: ${claudeText}\n\n`;
@@ -440,7 +440,7 @@
                 prompt += `Gemini: ${geminiText}\n\n`;
             }
             
-            prompt += `요약:`;
+            prompt += `간단한 한국어 요약:`;
             
             try {
                 // Ollama API 호출
