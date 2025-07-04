@@ -38,11 +38,86 @@
             color: #00aa00;
         }
         
-        .terminals {
+        .main-content {
             display: flex;
             flex: 1;
             gap: 4px;
             margin-bottom: 4px;
+        }
+        
+        .terminals {
+            display: flex;
+            flex: 2;
+            gap: 4px;
+        }
+        
+        .ai-summary-panel {
+            flex: 1;
+            border: 1px solid #333333;
+            background: #000000;
+            display: flex;
+            flex-direction: column;
+            max-width: 350px;
+            min-width: 300px;
+            border-color: #9932cc;
+        }
+        
+        .ai-summary-header {
+            padding: 4px 8px;
+            background: #000000;
+            border-bottom: 1px solid #9932cc;
+            color: #9932cc;
+            font-size: 10px;
+        }
+        
+        .ai-summary-content {
+            flex: 1;
+            padding: 8px;
+            overflow-y: auto;
+            font-size: 10px;
+            line-height: 1.4;
+        }
+        
+        .summary-item {
+            margin-bottom: 8px;
+            padding: 6px;
+            border: 1px solid #444;
+            background: #111;
+            border-radius: 4px;
+        }
+        
+        .summary-time {
+            color: #9932cc;
+            font-size: 9px;
+            margin-bottom: 2px;
+        }
+        
+        .summary-text {
+            color: #cccccc;
+            white-space: pre-wrap;
+        }
+        
+        .summary-loading {
+            color: #ffff00;
+            font-style: italic;
+        }
+        
+        .meta-terminal-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333333;
+            background: #000000;
+            border-color: #ff6600;
+        }
+        
+        .meta-terminal-container.focused {
+            border-color: #ffffff;
+        }
+        
+        .meta-header {
+            background: #000000;
+            border-bottom: 1px solid #ff6600;
         }
         
         .terminal-container {
@@ -153,19 +228,32 @@
         <p>[CTRL+SHIFT+T] Switch Terminal | [F12] Debug Console | Working in: ~/Desktop</p>
     </div>
     
-    <div class="terminals">
-        <div class="terminal-container claude-container" id="claude-container">
-            <div class="terminal-header claude-header">
-                [CLAUDE] Terminal
+    <div class="main-content">
+        <div class="terminals">
+            <div class="terminal-container claude-container" id="claude-container">
+                <div class="terminal-header claude-header">
+                    [CLAUDE] Terminal
+                </div>
+                <div id="claude-terminal" class="terminal"></div>
             </div>
-            <div id="claude-terminal" class="terminal"></div>
+            
+            <div class="terminal-container gemini-container" id="gemini-container">
+                <div class="terminal-header gemini-header">
+                    [GEMINI] Terminal
+                </div>
+                <div id="gemini-terminal" class="terminal"></div>
+            </div>
         </div>
         
-        <div class="terminal-container gemini-container" id="gemini-container">
-            <div class="terminal-header gemini-header">
-                [GEMINI] Terminal
+        <div class="ai-summary-panel">
+            <div class="ai-summary-header">
+                🤖 [OLLAMA] AI Summary
             </div>
-            <div id="gemini-terminal" class="terminal"></div>
+            <div class="ai-summary-content" id="summary-content">
+                <div class="summary-loading">
+                    Ollama AI가 대화를 분석할 준비를 하고 있습니다...
+                </div>
+            </div>
         </div>
     </div>
     
@@ -285,13 +373,140 @@
             setFocus('input');
         }, 800);
         
-        // 백엔드에서 터미널 출력 받기
+        // Ollama AI 요약 시스템
+        const ollamaAnalysis = {
+            claudeHistory: [],
+            geminiHistory: [],
+            summaryCount: 0,
+            isProcessing: false
+        };
+        
+        // Ollama API 호출 함수
+        async function callOllamaAPI(prompt) {
+            try {
+                const response = await fetch('http://localhost:11434/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'llama3.2:3b',
+                        prompt: prompt,
+                        stream: false
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data.response;
+            } catch (error) {
+                console.error('Ollama API 오류:', error);
+                return '⚠️ Ollama 연결 오류가 발생했습니다.';
+            }
+        }
+        
+        // AI 요약 생성 함수
+        async function generateAISummary() {
+            if (ollamaAnalysis.isProcessing) return;
+            
+            const claudeText = ollamaAnalysis.claudeHistory.slice(-2).join('\n').substring(0, 800);
+            const geminiText = ollamaAnalysis.geminiHistory.slice(-2).join('\n').substring(0, 800);
+            
+            if (!claudeText && !geminiText) return;
+            
+            ollamaAnalysis.isProcessing = true;
+            ollamaAnalysis.summaryCount++;
+            
+            // 로딩 메시지 표시
+            const summaryDiv = document.getElementById('summary-content');
+            const loadingItem = document.createElement('div');
+            loadingItem.className = 'summary-item';
+            loadingItem.innerHTML = `
+                <div class="summary-time">${new Date().toLocaleTimeString('ko-KR', { hour12: false })}</div>
+                <div class="summary-loading">🤖 AI가 대화를 분석중입니다...</div>
+            `;
+            summaryDiv.insertBefore(loadingItem, summaryDiv.firstChild);
+            
+            // Ollama에게 보낼 프롬프트 구성
+            let prompt = `다음은 Claude와 Gemini AI 간의 대화입니다. 이 대화를 간결하게 요약해주세요 (한국어로, 100자 이내):\n\n`;
+            
+            if (claudeText) {
+                prompt += `Claude: ${claudeText}\n\n`;
+            }
+            if (geminiText) {
+                prompt += `Gemini: ${geminiText}\n\n`;
+            }
+            
+            prompt += `요약:`;
+            
+            try {
+                // Ollama API 호출
+                const summary = await callOllamaAPI(prompt);
+                
+                // 로딩 메시지 제거
+                loadingItem.remove();
+                
+                // 요약 결과 표시
+                const summaryItem = document.createElement('div');
+                summaryItem.className = 'summary-item';
+                summaryItem.innerHTML = `
+                    <div class="summary-time">요약 #${ollamaAnalysis.summaryCount} - ${new Date().toLocaleTimeString('ko-KR', { hour12: false })}</div>
+                    <div class="summary-text">${summary}</div>
+                `;
+                summaryDiv.insertBefore(summaryItem, summaryDiv.firstChild);
+                
+                // 오래된 요약 제거 (최대 5개만 유지)
+                const items = summaryDiv.querySelectorAll('.summary-item');
+                if (items.length > 5) {
+                    for (let i = 5; i < items.length; i++) {
+                        items[i].remove();
+                    }
+                }
+                
+            } catch (error) {
+                loadingItem.innerHTML = `
+                    <div class="summary-time">${new Date().toLocaleTimeString('ko-KR', { hour12: false })}</div>
+                    <div style="color: #ff4444;">❌ 요약 생성 실패: ${error.message}</div>
+                `;
+            }
+            
+            ollamaAnalysis.isProcessing = false;
+        }
+        
+        // 텍스트 저장 및 요약 트리거
+        function saveAndSummarize(data, source) {
+            const text = data.toString().trim();
+            if (text.length < 10) return; // 너무 짧은 텍스트 무시
+            
+            if (source === 'claude') {
+                ollamaAnalysis.claudeHistory.push(text);
+                if (ollamaAnalysis.claudeHistory.length > 5) {
+                    ollamaAnalysis.claudeHistory.shift();
+                }
+            } else if (source === 'gemini') {
+                ollamaAnalysis.geminiHistory.push(text);
+                if (ollamaAnalysis.geminiHistory.length > 5) {
+                    ollamaAnalysis.geminiHistory.shift();
+                }
+            }
+            
+            // 10초마다 요약 실행
+            clearTimeout(window.summaryTimer);
+            window.summaryTimer = setTimeout(generateAISummary, 10000);
+        }
+        
+        // 백엔드에서 터미널 출력 받기 (AI 요약 추가)
         ipcRenderer.on('claude-data', (event, data) => {
             claudeTerminal.write(data);
+            saveAndSummarize(data, 'claude');
         });
         
         ipcRenderer.on('gemini-data', (event, data) => {
             geminiTerminal.write(data);
+            saveAndSummarize(data, 'gemini');
         });
         
         // 포커스 상태 관리
